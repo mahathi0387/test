@@ -1,62 +1,59 @@
-pipeline { 
-    agent any 
-    environment {
-        mvn_home = tool name: 'Maven', type: 'maven'
-       
-            }
-    stages {
+
+pipeline {
+    agent none
+        stages {
         stage('SCM-Checkout') { 
+            agent any
             steps { 
                 git credentialsId: 'git', url: 'https://github.com/mahathi0387/ws2.git'
                  
             }
         }
+        
         stage('Build'){
+            agent { docker 'maven:3-alpine'}
             steps {
-                  sh "cd sa-webapp && '${mvn_home}/bin/mvn' clean package"
+                  sh "cd sa-webapp && mvn clean package"
             }
         }
         
-       stage('Build-Docker-Image') {
-            steps {
-                sh label: '', script: 'cd sa-webapp && sudo docker build -f Dockerfile -t omahathi/sentiment-analysis-web-app1 .'
+        stage('Build-Docker-Image') {
+                agent any
+                steps { 
+                sh label: '', script: 'cd sa-webapp && docker build -f Dockerfile -t omahathi/sentiment-analysis-web-app1 .'
             }
         }
         
         stage('Build-Docker-Image2') {
+            agent any
             steps {
-                sh label: '', script: 'cd sa-logic && sudo docker build -f Dockerfile -t omahathi/sentiment-analysis-logic .'
-            }
-        }
-                     
-        stage('Build-Docker-Image3') {
-            steps {
-               sh label: '', script: '''cd sa-frontend && npm install
-               npm run build
-               sudo docker build -f Dockerfile -t omahathi/sentiment-analysis-frontend .'''
+                sh label: '', script: 'cd sa-logic && docker build -f Dockerfile -t omahathi/sentiment-analysis-logic .'
             }
         }
         
-        stage('Push-Image-To-Hub'){
-            steps{
-                withCredentials([usernamePassword(credentialsId: 'dockerhub', passwordVariable: 'pwd', usernameVariable: 'dockerhub')]) {
-                    sh "docker login -u '${username}' -p '${pwd}'"
-                    sh "docker push omahathi/sentiment-analysis-frontend"
-					sh "docker push omahathi/sentiment-analysis-logic"
-					sh "docker push omahathi/sentiment-analysis-web-app"
-                }
+        stage('npm-Build') {
+               agent {  docker 'node:6-alpine'}
+               steps {
+              sh label: '', script: '''cd sa-frontend && npm install
+              npm run build'''
+            }
+        }
+        
+           stage('Build-Docker-Image3') {
+            agent any
+            steps {
+              sh "cd sa-frontend && docker build -f Dockerfile -t omahathi/sentiment-analysis-frontend ."
             }
         }
          stage('Build-Docker-run')
          {
+            agent any
             steps {
-                sh label: '', script: '''sudo docker run -d -p 5050:5000 omahathi/sentiment-analysis-logic
-                sudo docker run -d -p 8080:8080 -e SA_LOGIC_API_URL=\'http://172.17.0.2:5000\' omahathi/sentiment-analysis-web-app
-                sudo docker run -d -p 81:80 omahathi/sentiment-analysis-frontend'''
+                sh label: '', script: '''docker run -d -p 5050:5000 omahathi/sentiment-analysis-logic
+                docker run -d -p 8082:8080 -e SA_LOGIC_API_URL=\'http://172.17.0.2:5000\' omahathi/sentiment-analysis-web-app1
+                docker run -d -p 80:80 omahathi/sentiment-analysis-frontend'''
             }
             
         }
-	   
-
-	  }
+    }
 }
